@@ -39,7 +39,7 @@ int pieceSign(int w, int h) {  // 駒の符号
   return int(Math.signum(board[h][w]));
 }
 
-boolean ArrayContains(int[] targets, int key) {  // targetsにkeyが含まれるかどうか
+boolean arrayContains(int[] targets, int key) {  // targetsにkeyが含まれるかどうか
   for (int i = 0; i < targets.length; i++) {
     if (targets[i] == key) return true;
   }
@@ -231,7 +231,7 @@ void updatePlacable(int w, int h) {  // 移動可能な位置の更新
   }
 
   int[] a = { R, pR };
-  if (ArrayContains(a, type)) {  // 飛, 竜
+  if (arrayContains(a, type)) {  // 飛, 竜
     for (int i = 0; i < 8; i += 2) {
       for (int j = 1; j < 8; j++) {
         int p = j * dx[i] + w;
@@ -246,7 +246,7 @@ void updatePlacable(int w, int h) {  // 移動可能な位置の更新
   }
 
   int[] b = { B, pB };
-  if (ArrayContains(b, type)) {  // 角, 馬
+  if (arrayContains(b, type)) {  // 角, 馬
     for (int i = 1; i < 9; i += 2) {
       for (int j = 1; j < floor(9 * sqrt(2.0)); j++) {
         int p = j * dx[i] + w;
@@ -261,7 +261,7 @@ void updatePlacable(int w, int h) {  // 移動可能な位置の更新
   }
 
   int[] c = { G, pP, pL, pN, pS };
-  if (ArrayContains(c, type)) {  // 金, と, 成香, 成桂, 成銀
+  if (arrayContains(c, type)) {  // 金, と, 成香, 成桂, 成銀
     for (int i = 0; i < 8; i++) {
       if (i == 5 || i == 7) continue;
       int p = -sign * dx[i] + w;
@@ -274,7 +274,7 @@ void updatePlacable(int w, int h) {  // 移動可能な位置の更新
   }
 
   int[] d = { pR, pB, K, pK };
-  if (ArrayContains(d, type)) {  // 竜, 馬, 王, 玉
+  if (arrayContains(d, type)) {  // 竜, 馬, 王, 玉
     for (int i = 0; i < 8; i++) {
       int p = dx[i] + w;
       int q = dy[i] + h;
@@ -315,7 +315,7 @@ void putStock() {  // 持ち駒の使用
     }
     for (int i = 0; i < 9; i++) {
       for (int j = 0; j < 9; j++) {
-        if (ArrayContains(b[i], turn * P)) {
+        if (arrayContains(b[i], turn * P)) {
           movable[j][i] = false;
         }
       }
@@ -420,8 +420,8 @@ void mousePressed() {
 
     int piece = board[q][p];
     int[] a = { +P, +L }, b = { -P, -L };
-    if (ArrayContains(a, piece) && q == 0 ||
-      ArrayContains(b, piece) && q == 8 ||
+    if (arrayContains(a, piece) && q == 0 ||
+      arrayContains(b, piece) && q == 8 ||
       piece == +N && q <= 1 ||
       piece == -N && q >= 7) {
       promote(p, q, -turn);
