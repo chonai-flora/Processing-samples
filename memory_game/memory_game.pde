@@ -42,6 +42,9 @@ class Trump {
   }
 
   void draw() {
+    fill(this.hidden || this.mark < 1 || this.mark > 2
+      ? #000000 : #FF0000
+      );
     text(
       this.hidden ? "🂠" : this.card,
       this.x, this.y
@@ -138,11 +141,6 @@ void draw() {
 
   for (Trump trump : trumps) {
     push();
-    fill(trump.hidden ||
-      trump.mark < 1 || trump.mark > 2
-      ? #000000
-      : #FF0000
-      );
     if (trump.number > 0) {
       trump.draw();
     }
