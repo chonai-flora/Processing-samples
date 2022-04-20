@@ -1,12 +1,13 @@
-final int CANVAS = 720;
-final int BLOCK = CANVAS / 9;
+final float screen = 720;
+final float halfScreen = screen / 2;
+final float block = screen / 9;
 
-/* 歩:P 香:L 桂:N 銀:S 金:G 飛:R 角:B */
+// 歩:P 香:L 桂:N 銀:S 金:G 飛:R 角:B
 final int P = 1, L = 2, N = 3, S = 4, R = 5, B = 6, G = 7;
-/* と:pP 成香:pL 成桂:pN 成銀:pS 竜:pR 馬:pB 王:K 玉:pK */
+// と:pP 成香:pL 成桂:pN 成銀:pS 竜:pR 馬:pB 王:K 玉:pK
 final int pP = 8, pL = 9, pN = 10, pS = 11, pR = 12, pB = 13, K = 14, pK = 15;
 
-int[][] board = {  // 盤面
+int[][] board = {
   { -L, -N, -S, -G, -pK, -G, -S, -N, -L },
   { 0, -R, 0, 0, 0, 0, 0, -B, 0 },
   { -P, -P, -P, -P, -P, -P, -P, -P, -P },
@@ -17,108 +18,395 @@ int[][] board = {  // 盤面
   { 0, +B, 0, 0, 0, 0, 0, +R, 0 },
   { +L, +N, +S, +G, +K, +G, +S, +N, +L }
 };
-int turn = +1;  // ターン
-boolean[][] movable = new boolean[9][9];  // 移動可能かどうか
-int[] dx = { 1, 1, 0, -1, -1, -1, 0, 1 };  // x座標の移動位置
-int[] dy = { 0, 1, 1, 1, 0, -1, -1, -1 };  // y座標の移動位置
-int promoX = 10, promoY = 10;  // 成る際の座標
-int pieceX = 10, pieceY = 10;  // 選択中の座標
-boolean isPromoting = false;  // 成るかどうかの選択中
-boolean gameEnds = false;  // 勝敗がついたかどうか
+boolean[][] isMovable = new boolean[9][9];
+IntList checkedPieces = new IntList();
+int turn = +1;
+int pieceX = 10, pieceY = 10;
+int promoX = 10, promoY = 10;
+int[] dx = {1, 1, 0, -1, -1, -1, 0, 1};
+int[] dy = {0, 1, 1, 1, 0, -1, -1, -1};
+int[] stockOrder = {0, P, L, N, S, G, R, B};
 
-PImage[] pieces = new PImage[16];  // 駒の画像データ
-int[][] stocks = new int[2][8];  // 持ち駒
-int[] stockOrder = { 0, P, L, N, S, G, R, B };  //　持ち駒の並び
-int stockIndex = 0;  // 持ち駒のインデックス
+boolean isPromoting = false;
+boolean gameEnds = false;
+PImage[] pieces = new PImage[16];
+int[][] stocks = new int[2][8];
+int stockIndex = 0;
 
-boolean isOutOfRange(int w, int h) {  // 盤面外かどうか
-  return (w < 0 || h < 0 || w >= 9 || h >= 9);
-}
-
-int pieceSign(int w, int h) {  // 駒の符号
-  return int(Math.signum(board[h][w]));
-}
-
-boolean arrayContains(int[] targets, int key) {  // targetsにkeyが含まれるかどうか
+boolean arrayContains(int[] targets, int key) { // targetsにkeyが含まれるかどうか
   for (int i = 0; i < targets.length; i++) {
     if (targets[i] == key) return true;
   }
   return false;
 }
 
-void initMovable() {  // 移動可能な位置の初期化
+boolean isOutOfRange(int w, int h) { // 配列の範囲内かどうか
+  return (w < 0 || h < 0 || w >= 9 || h >= 9);
+}
+
+int pieceType(int w, int h) { // 駒の種類
+  return abs(board[h][w]);
+}
+
+int pieceSign(int w, int h) { // 駒の符号
+  return int(Math.signum(board[h][w]));
+}
+
+void initMovable() { // 移動可能な範囲を初期化
   for (int i = 0; i < 9; i++) {
     for (int j = 0; j < 9; j++) {
-      movable[j][i] = false;
+      isMovable[j][i] = false;
     }
   }
 }
 
-void setup() {
-  size(720, 960);
-  strokeWeight(2);
-  rectMode(CENTER);
-  imageMode(CENTER);
-  textSize(BLOCK - 20);
-  textAlign(CENTER, CENTER);
-  textFont(createFont("Meiryo", 48));
+void showStock(int n) { // 持ち駒を表示
+  push();
+  boolean isSelf = n == 1;
+  translate(block / 2, isSelf ? screen + block * 5 / 2 : block * 3 / 2);
+  image(pieces[isSelf ? K : pK], 0, 0);
+  fill(#000000);
+  stroke(#FFFFFF);
+  textSize(block / 4);
+  for (int i = P; i <= G; i++) {
+    int order = stockOrder[i];
+    int stock = stocks[int(isSelf)][order];
+    if (stock == 0) continue;
+    image(pieces[order], (i + 1) * block, 0);
+    text("×" + stock, i * block + block * 5 / 4, block / 4);
+  }
+  pop();
+}
+
+void showTurn() { // ターンと勝敗を表示
+  String message = (turn == 1 ? "王" : "玉") +
+    (gameEnds ? "の勝ちです" : "のターンです");
+  push();
+  fill(#000000);
+  textSize(block / 2.75);
+  textAlign(LEFT, TOP);
+  text(message, 0, 0);
+  if (isChecked()) {
+    text("王手されています", 0, block/2);
+  }
+  pop();
+}
+
+void promote (int w, int h, int sign) { // 成る
+  int type = pieceType(w, h);
+  if (type >= P && type <= B) {
+    board[h][w] = sign * (type + 7);
+  }
+}
+
+void askPromote() { // 成るかどうか尋ねる
+  push();
+  noStroke();
+  rectMode(CORNER);
+  fill(#00C000, 192);
+  square(0, 2*block, screen);
+
+  fill(#00FF00, 192);
+  rect(block, 5 * block, 7 * block, 3 * block);
+  fill(#000000);
+  text("成りますか?", screen / 2, screen / 2 + block);
+
+  textSize(32);
+  for (int i = 0; i < 2; i++) {
+    float x = screen / 4 + 2.5 * i * block;
+    float y = 6.5 * block;
+    fill(#FFFFFF);
+    rect(x, y, 2 * block, block);
+    fill(#000000);
+    text(i == 0 ? "はい" : "いいえ", x + block, y + block / 2.25);
+  }
+  pop();
+}
+
+boolean buttonPressed(float pos) { // 成る際の選択ボタン
+  return (mouseX >= screen / 4 + pos && mouseX <= screen / 4 + 2 * block + pos &&
+    mouseY >= 6.5 * block && mouseY <= 7.5 * block);
+}
+
+void updatePlacable(int w, int h) { // 移動可能な範囲を更新
+  initMovable();
+  int type = pieceType(w, h);
+  int sign = pieceSign(w, h);
+
+  if (type == P) {
+    if (pieceSign(w, h - sign) != turn) {
+      isMovable[h - sign][w] = true;
+    }
+  }
+
+  if (type == L) {
+    for (int i = h - sign; sign == 1 ? i >= 0 : i < 9; i -= sign) {
+      if (pieceSign(w, i) == turn) break;
+      isMovable[i][w] = true;
+      if (pieceSign(w, i) != 0) break;
+    }
+  }
+
+  if (type == N) {
+    for (int i = 1; i <= 3; i += 2) {
+      int r = -sign * dx[i] + w;
+      int c = -sign * dy[i] * 2 + h;
+
+      if (isOutOfRange(r, c) || pieceSign(r, c) == sign) continue;
+      isMovable[c][r] = true;
+    }
+  }
+
+  if (type == S) {
+    for (int i = 0; i < 8; i++) {
+      if (new IntList(0, 4, 6).hasValue(i)) continue;
+
+      if (new IntList(0, 4, 6).hasValue(i)) continue;
+      int r = -sign * dx[i] + w;
+      int c = -sign * dy[i] + h;
+
+      if (isOutOfRange(r, c) || pieceSign(r, c) == sign) continue;
+      isMovable[c][r] = true;
+    }
+  }
+
+  if (new IntList(R, pR).hasValue(type)) {
+    for (int i = 0; i < 8; i += 2) {
+      for (int j = 1; j < 9; j++) {
+        int r = j * dx[i] + w;
+        int c = j * dy[i] + h;
+
+        if (isOutOfRange(r, c) || pieceSign(r, c) == sign) break;
+        isMovable[c][r] = true;
+        if (pieceSign(r, c) != 0) break;
+      }
+    }
+  }
+
+  if (new IntList(B, pB).hasValue(type)) {
+    for (int i = 1; i < 9; i += 2) {
+      for (int j = 1; j < floor(9 * sqrt(2)); j++) {
+        int r = j * dx[i] + w;
+        int c = j * dy[i] + h;
+
+        if (isOutOfRange(r, c) || pieceSign(r, c) == sign) break;
+        isMovable[c][r] = true;
+        if (pieceSign(r, c) != 0) break;
+      }
+    }
+  }
+
+  if (new IntList(G, pP, pL, pN, pS).hasValue(type)) {
+    for (int i = 0; i < 8; i++) {
+      if (new IntList(5, 7).hasValue(i)) continue;
+      int r = -sign * dx[i] + w;
+      int c = -sign * dy[i] + h;
+
+      if (isOutOfRange(r, c) || pieceSign(r, c) == sign) continue;
+      isMovable[c][r] = true;
+    }
+  }
+
+  if (new IntList(pR, pB, K, pK).hasValue(type)) {
+    for (int i = 0; i < 8; i++) {
+      int r = dx[i] + w;
+      int c = dy[i] + h;
+
+      if (isOutOfRange(r, c) || pieceSign(r, c) == sign) continue;
+      isMovable[c][r] = true;
+    }
+  }
+
+  pieceX = w;
+  pieceY = h;
+}
+
+void checkPiece(int w, int h) { // チェックされている駒を更新
+  int type = pieceType(w, h);
+  int sign = pieceSign(w, h);
+
+  if (type == P) {
+    if (pieceSign(w, h - sign) == turn) {
+      checkedPieces.push(board[h - sign][w]);
+    }
+  }
+
+  if (type == L) {
+    for (int i = h - sign; sign == 1 ? i >= 0 : i < 9; i -= sign) {
+      if (pieceSign(w, i) != turn) break;
+      checkedPieces.push(board[i][w]);
+      if (pieceSign(w, i) != 0) break;
+    }
+  }
+
+  if (type == N) {
+    for (int i = 1; i <= 3; i += 2) {
+      int r = -sign * dx[i] + w;
+      int c = -sign * dy[i] * 2 + h;
+
+      if (isOutOfRange(r, c) || pieceSign(r, c) == sign) continue;
+      checkedPieces.push(board[c][r]);
+    }
+  }
+
+  if (type == S) {
+    for (int i = 0; i < 8; i++) {
+      if (new IntList(0, 4, 6).hasValue(i)) continue;
+      int r = -sign * dx[i] + w;
+      int c = -sign * dy[i] + h;
+
+      if (isOutOfRange(r, c) || pieceSign(r, c) == sign) continue;
+      checkedPieces.push(board[c][r]);
+    }
+  }
+
+  if (new IntList(R, pR).hasValue(type)) {
+    for (int i = 0; i < 8; i += 2) {
+      for (int j = 1; j < 9; j++) {
+        int r = j * dx[i] + w;
+        int c = j * dy[i] + h;
+
+        if (isOutOfRange(r, c) || pieceSign(r, c) == sign) break;
+        checkedPieces.push(board[c][r]);
+        if (pieceSign(r, c) != 0) break;
+      }
+    }
+  }
+
+  if (new IntList(B, pB).hasValue(type)) {
+    for (int i = 1; i < 9; i += 2) {
+      for (int j = 1; j < floor(9 * sqrt(2)); j++) {
+        int r = j * dx[i] + w;
+        int c = j * dy[i] + h;
+
+        if (isOutOfRange(r, c) || pieceSign(r, c) == sign) break;
+        checkedPieces.push(board[c][r]);
+        if (pieceSign(r, c) != 0) break;
+      }
+    }
+  }
+
+  if (new IntList(G, pP, pL, pN, pS).hasValue(type)) {
+    for (int i = 0; i < 8; i++) {
+      if (new IntList(5, 7).hasValue(i)) continue;
+      int r = -sign * dx[i] + w;
+      int c = -sign * dy[i] + h;
+
+      if (isOutOfRange(r, c) || pieceSign(r, c) == sign) continue;
+      checkedPieces.push(board[c][r]);
+    }
+  }
+
+  if (new IntList(pR, pB, K, pK).hasValue(type)) {
+    for (int i = 0; i < 8; i++) {
+      int r = dx[i] + w;
+      int c = dy[i] + h;
+
+      if (isOutOfRange(r, c) || pieceSign(r, c) == sign) continue;
+      checkedPieces.push(board[c][r]);
+    }
+  }
+}
+
+boolean isChecked() { // チェック(王手)されているか判定
+  checkedPieces.clear();
+  for (int i = 0; i < 9; i++) {
+    for (int j = 0; j < 9; j++) {
+      if (pieceSign(i, j) != turn) {
+        checkPiece(i, j);
+      }
+    }
+  }
+  return checkedPieces.hasValue(K) || checkedPieces.hasValue(-pK);
+}
+
+void putStock() { // 持ち駒を使用
+  int piece = stockOrder[stockIndex];
+
+  if (stocks[int(turn == 1)][piece] == 0) return;
 
   initMovable();
+  for (int i = 0; i < 9; i++) {
+    for (int j = 0; j < 9; j++) {
+      isMovable[j][i] = board[j][i] == 0;
+    }
+  }
+
+  if (piece == P) {
+    IntList[] b = new IntList[9];
+    for (int i = 0; i < 9; i++) {
+      b[i] = new IntList(board[i]);
+    }
+    for (int i = 0; i < 9; i++) {
+      for (int j = i; j < 9; j++) {
+        int tmp = b[j].get(i);
+        b[j].set(i, b[i].get(j));
+        b[i].set(j, tmp);
+      }
+    }
+    for (int i = 0; i < 9; i++) {
+      for (int j = 0; j < 9; j++) {
+        if (b[i].hasValue(turn * P)) {
+          isMovable[j][i] = false;
+        }
+      }
+      int k = turn == 1 ? 0 : 8;
+      isMovable[k][i] = false;
+    }
+  } else if (piece == L) {
+    for (int i = 0; i < 9; i++) {
+      int j = turn == 1 ? 0 : 8;
+      isMovable[j][i] = false;
+    }
+  } else if (piece == N) {
+    for (int i = 0; i < 9; i++) {
+      for (int j = 0; j < 2; j++) {
+        int k = turn == 1 ? j : 8 - j;
+        isMovable[k][i] = false;
+      }
+    }
+  }
+
+  pieceX = pieceY = 10;
+}
+
+void setup() {
+  size(720, 960);
+  rectMode(CENTER);
+  imageMode(CENTER);
+  textAlign(CENTER, CENTER);
+  textFont(createFont("Meiryo", block * 3 / 4));
+
+  turn = +1;
+  initMovable();
+  isPromoting = gameEnds = false;
+
   for (int i = P; i <= pK; i++) {
     pieces[i] = loadImage("img/" + nf(i, 2) + ".png");
-    pieces[i].resize(BLOCK - 10, BLOCK - 10);
+    pieces[i].resize(int(block - 10), int(block - 10));
   }
 
   noLoop();
 }
 
-void showStock(int n) {  // 持ち駒を表示
-  push();
-  boolean isSelf = n == 1;
-  int pos = isSelf ? CANVAS + 2 * BLOCK : BLOCK;
-  image(pieces[isSelf ? K : pK], BLOCK / 2, pos + BLOCK / 2);
-
-  fill(#000000);
-  stroke(#FFFFFF);
-  textSize(18);
-  for (int i = P; i <= G; i++) {
-    int j = stockOrder[i];
-    int x = (i + 1) * BLOCK + BLOCK / 2;
-    int y = pos + BLOCK / 2;
-    image(pieces[j], x, y);
-    text("×" + stocks[int(isSelf)][j], x + BLOCK / 2 - 20, y + BLOCK / 2 - 10);
-  }
-  pop();
-}
-
-void showTurn() {  // ターンを表示
-  push();
-  noStroke();
-  rectMode(CORNER);
-  textAlign(LEFT, TOP);
-  fill(#FFFFFF);
-  rect(0, 0, CANVAS, BLOCK);
-  fill(#000000);
-  text((turn == 1 ? "王" : "玉") + "のターンです", 5, 10);
-  pop();
-}
-
 void draw() {
-  background(#008000);
+  background(#FFFFFF);
+
+  fill(#008000);
+  noStroke();
+  rect(halfScreen, 1.5 * block, screen + 2, block);
+  rect(halfScreen, 11.5 * block, screen + 2, block);
   showStock(1);
   showStock(-1);
 
   for (int i = 0; i < 9; i++) {
     for (int j = 0; j < 9; j++) {
       push();
-      translate(i * BLOCK + BLOCK / 2, (j + 2) * BLOCK + BLOCK / 2);
-      fill(
-        i == pieceX && j == pieceY || movable[j][i]
-        ? #228B22
-        : #DAA520
-        );
+      translate(i * block + block / 2, (j + 2) * block + block / 2);
+      fill((i == pieceX && j == pieceY) || isMovable[j][i] ?
+        #228B22 : #DAA520);
       stroke(#000000);
-      rect(0, 0, BLOCK, BLOCK);
+      rect(0, 0, block, block);
       int k = board[j][i];
       if (k == 0) {
         pop();
@@ -133,22 +421,8 @@ void draw() {
   }
 
   noFill();
-  square(
-    pieceX * BLOCK + BLOCK / 2,
-    (pieceY + 2) * BLOCK + BLOCK / 2,
-    BLOCK
-    );
-
-  if (gameEnds) {
-    rectMode(CORNER);
-    noStroke();
-    fill(#00C000, 192);
-    rect(0, 2 * BLOCK, CANVAS, CANVAS);
-    fill(#00FF00, 192);
-    rect(BLOCK, 5 * BLOCK, 7 * BLOCK, 3 * BLOCK);
-    fill(#000000);
-    text((turn == 1 ? "王" : "玉") + "の勝ちです", CANVAS / 2, 6.5 * BLOCK);
-  }
+  square(pieceX * block + block / 2,
+    (pieceY + 2) * block + block / 2, block);
 
   showTurn();
 
@@ -158,233 +432,47 @@ void draw() {
   }
 }
 
-void promote(int w, int h, int sign) {  // 成る
-  int type = abs(board[h][w]);
-  if (type >= P && type <= B) {
-    board[h][w] = -sign * (type + 7);
-  }
-}
-
-void askPromote() {  // 成るかどうか尋ねる
-  push();
-  noStroke();
-  rectMode(CORNER);
-  fill(#00C000, 192);
-  square(0, 2*BLOCK, CANVAS);
-
-  fill(#00FF00, 192);
-  rect(BLOCK, 5 * BLOCK, 7 * BLOCK, 3 * BLOCK);
-  fill(#000000);
-  text("成りますか?", CANVAS / 2, CANVAS / 2 + BLOCK);
-
-  textSize(32);
-  for (int i = 0; i < 2; i++) {
-    float x = CANVAS / 4 + 2.5 * i * BLOCK;
-    float y = 6.5 * BLOCK;
-    fill(#FFFFFF);
-    rect(x, y, 2 * BLOCK, BLOCK);
-    fill(#000000);
-    text(i == 0 ? "はい" : "いいえ", x + BLOCK, y + BLOCK / 2.25);
-  }
-  pop();
-}
-
-void updatePlacable(int w, int h) {  // 移動可能な位置の更新
-  initMovable();
-
-  int type = abs(board[h][w]);
-  int sign = pieceSign(w, h);
-
-  if (type == P) {  // 歩
-    movable[h - sign][w] = true;
-  }
-
-  if (type == L) {  // 香
-    for (int i = h - sign; sign == 1 ? i >= 0 : i < 9; i -= sign) {
-      if (pieceSign(w, i) == turn) break;
-      movable[i][w] = true;
-      if (pieceSign(w, i) != 0) break;
-    }
-  }
-
-  if (type == N) {  // 桂
-    for (int i = 1; i <= 3; i += 2) {
-      int p = -sign * dx[i] + w;
-      int q = -sign * dy[i] * 2 + h;
-
-      if (isOutOfRange(p, q) ||
-        pieceSign(p, q) == sign) continue;
-      movable[q][p] = true;
-    }
-  }
-
-  if (type == S) {  // 銀
-    for (int i = 1; i < 8; i++) {
-      if (i == 4 || i == 6) continue;
-      int p = -sign * dx[i] + w;
-      int q = -sign * dy[i] + h;
-
-      if (isOutOfRange(p, q) ||
-        pieceSign(p, q) == sign) continue;
-      movable[q][p] = true;
-    }
-  }
-
-  int[] a = { R, pR };
-  if (arrayContains(a, type)) {  // 飛, 竜
-    for (int i = 0; i < 8; i += 2) {
-      for (int j = 1; j < 8; j++) {
-        int p = j * dx[i] + w;
-        int q = j * dy[i] + h;
-
-        if (isOutOfRange(p, q) ||
-          pieceSign(p, q) == sign) break;
-        movable[q][p] = true;
-        if (pieceSign(p, q) != 0) break;
-      }
-    }
-  }
-
-  int[] b = { B, pB };
-  if (arrayContains(b, type)) {  // 角, 馬
-    for (int i = 1; i < 9; i += 2) {
-      for (int j = 1; j < floor(9 * sqrt(2.0)); j++) {
-        int p = j * dx[i] + w;
-        int q = j * dy[i] + h;
-
-        if (isOutOfRange(p, q) ||
-          pieceSign(p, q) == sign) break;
-        movable[q][p] = true;
-        if (pieceSign(p, q) != 0) break;
-      }
-    }
-  }
-
-  int[] c = { G, pP, pL, pN, pS };
-  if (arrayContains(c, type)) {  // 金, と, 成香, 成桂, 成銀
-    for (int i = 0; i < 8; i++) {
-      if (i == 5 || i == 7) continue;
-      int p = -sign * dx[i] + w;
-      int q = -sign * dy[i] + h;
-
-      if (isOutOfRange(p, q) ||
-        pieceSign(p, q) == sign) continue;
-      movable[q][p] = true;
-    }
-  }
-
-  int[] d = { pR, pB, K, pK };
-  if (arrayContains(d, type)) {  // 竜, 馬, 王, 玉
-    for (int i = 0; i < 8; i++) {
-      int p = dx[i] + w;
-      int q = dy[i] + h;
-
-      if (isOutOfRange(p, q) ||
-        pieceSign(p, q) == sign) continue;
-      movable[q][p] = true;
-    }
-  }
-
-  pieceX = w;
-  pieceY = h;
-}
-
-void putStock() {  // 持ち駒の使用
-  int piece = stockOrder[stockIndex];
-  if (stocks[int(turn == 1)][piece] == 0)
-    return;
-
-  initMovable();
-  for (int i = 0; i < 9; i++) {
-    for (int j = 0; j < 9; j++) {
-      movable[j][i] = board[j][i] == 0;
-    }
-  }
-
-  if (piece == P) {
-    int[][] b = new int[9][9];
-    for (int i = 0; i < 9; i++) {
-      b[i] = board[i].clone();
-    }
-    for (int i = 0; i < 9; i++) {
-      for (int j = i; j < 9; j++) {
-        int tmp = b[j][i];
-        b[j][i] = b[i][j];
-        b[i][j] = tmp;
-      }
-    }
-    for (int i = 0; i < 9; i++) {
-      for (int j = 0; j < 9; j++) {
-        if (arrayContains(b[i], turn * P)) {
-          movable[j][i] = false;
-        }
-      }
-      int k = turn == 1 ? 0 : 8;
-      movable[k][i] = false;
-    }
-  } else if (piece == L) {
-    for (int i = 0; i < 9; i++) {
-      int j = turn == 1 ? 0 : 8;
-      movable[j][i] = false;
-    }
-  } else if (piece == N) {
-    for (int i = 0; i < 9; i++) {
-      for (int j = 0; j < 2; j++) {
-        int k = turn == 1 ? j : 8 - j;
-        movable[k][i] = false;
-      }
-    }
-  }
-
-  pieceX = pieceY = 10;
-}
-
-boolean buttonPressed(float pos) {  // 成る際の選択ボタン
-  return (mouseX >= CANVAS / 4 + pos && mouseX <= CANVAS / 4 + 2 * BLOCK + pos &&
-    mouseY >= 6.5 * BLOCK && mouseY <= 7.5 * BLOCK);
-}
-
 void mousePressed() {
   if (gameEnds) return;
 
   if (isPromoting) {
     if (buttonPressed(0)) {
-      promote(promoX, promoY, turn);
+      promote(promoX, promoY, -turn);
       promoX = promoY = 10;
       isPromoting = false;
       redraw();
-    } else if (buttonPressed(2.5 * BLOCK)) {
+    } else if (buttonPressed(2.5 * block)) {
       isPromoting = false;
       redraw();
     }
     return;
   }
 
-  int p = floor(mouseX / BLOCK);
-  int q = floor(mouseY / BLOCK) - 2;
+  int r = floor(mouseX / block);
+  int c = floor(mouseY / block) - 2;
 
-  if ((turn == 1 && q == 9 ||
-    turn == -1 && q == -1) &&
-    stocks[int(turn == 1)][stockOrder[p - 1]] > 0) {
-    stockIndex = p - 1;
+  if (((turn == 1 && c == 9) || (turn == -1 && c == -1)) &&
+    stocks[int(turn == 1)][stockOrder[r - 1]] > 0) {
+    stockIndex = r - 1;
     putStock();
     redraw();
     push();
     noFill();
     stroke(#0000FF);
-    square(p * BLOCK + BLOCK / 2, (q + 2) * BLOCK + BLOCK / 2, BLOCK);
+    square(r * block + block / 2, (c + 2) * block + block / 2, block);
     pop();
   }
 
-  if (isOutOfRange(p, q)) return;
-  if (board[q][p] != 0 &&
-    pieceSign(p, q) == turn) {
-    updatePlacable(p, q);
+  if (isOutOfRange(r, c)) return;
+
+  if (board[c][r] != 0 &&
+    pieceSign(r, c) == turn) {
+    updatePlacable(r, c);
   }
 
-  if (movable[q][p]) {
-    if (board[q][p] != 0) {
-      int type = abs(board[q][p]);
+  if (isMovable[c][r]) {
+    if (board[c][r] != 0) {
+      int type = pieceType(r, c);
       if (type >= pP && type <= pB) {
         type -= 7;
       }
@@ -395,36 +483,32 @@ void mousePressed() {
 
     if (!isOutOfRange(pieceX, pieceY) &&
       board[pieceY][pieceX] != 0) {
-      if (abs(board[pieceY][pieceX]) <= B &&
-        (turn == +1 && q <= 2 ||
-        turn == -1 && q >= 6)) {
+      if (((turn == 1 && c <= 2) || (turn == -1 && c >= 6)) &&
+        pieceType(pieceX, pieceY) <= B) {
         isPromoting = true;
-        promoX = p;
-        promoY = q;
+        promoX = r;
+        promoY = c;
       }
     }
 
-    gameEnds = abs(board[q][p]) >= K;
+    gameEnds = pieceType(r, c) >= K;
     initMovable();
 
     if (isOutOfRange(pieceX, pieceY)) {
       int piece = turn * stockOrder[stockIndex];
-      board[q][p] = piece;
+      board[c][r] = piece;
       stocks[int(turn == 1)][abs(piece)]--;
-      stockIndex = 0;
     } else {
-      board[q][p] = board[pieceY][pieceX];
+      board[c][r] = board[pieceY][pieceX];
       board[pieceY][pieceX] = 0;
       pieceX = pieceY = 10;
     }
 
-    int piece = board[q][p];
-    int[] a = { +P, +L }, b = { -P, -L };
-    if (arrayContains(a, piece) && q == 0 ||
-      arrayContains(b, piece) && q == 8 ||
-      piece == +N && q <= 1 ||
-      piece == -N && q >= 7) {
-      promote(p, q, -turn);
+    int piece = board[c][r];
+    if ((new IntList(+P, +L).hasValue(piece) && c == 0) ||
+      (new IntList(-P, -L).hasValue(piece) && c == 8) ||
+      (piece == +N && c <= 1) || (piece == -N && c >= 7)) {
+      promote(r, c, turn);
       isPromoting = false;
     }
 
