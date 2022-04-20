@@ -376,10 +376,7 @@ void setup() {
   imageMode(CENTER);
   textAlign(CENTER, CENTER);
   textFont(createFont("Meiryo", block * 3 / 4));
-
-  turn = +1;
   initMovable();
-  isPromoting = gameEnds = false;
 
   for (int i = P; i <= pK; i++) {
     pieces[i] = loadImage("img/" + nf(i, 2) + ".png");
