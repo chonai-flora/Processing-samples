@@ -65,38 +65,47 @@ void checkAnswer() {
   char[] mismatches = answer.toCharArray();
   for (int i = 0; i < 5; i++) {
     char c = wordCards[wordCount][i];
-    int index = keyCodes.indexOf(c);
+    int keyIndex = keyCodes.indexOf(c);
     if (c == answer.charAt(i)) {
       score++;
       mismatches[i] = ' ';
-      keyColors[index] =
+      keyColors[keyIndex] =
         responceColors[i] = #538D4E;
     } else {
       responceColors[i] = #3A3A3C;
-      if (keyColors[index] != #538D4E) {
-        keyColors[index] = #3A3A3C;
+      if (keyColors[keyIndex] != #538D4E) {
+        keyColors[keyIndex] = #3A3A3C;
       }
     }
   }
 
   for (int i = 0; i < 5; i++) {
     char c = wordCards[wordCount][i];
-    int index = new String(keyCodes).indexOf(c);
+    int keyIndex = new String(keyCodes).indexOf(c);
+    int mismatchIndex = new String(mismatches).indexOf(c);
 
-    boolean charExists = false;
-    for (int j = 0; j < mismatches.length; j++) {
-      if (c == mismatches[j]) {
-        charExists = true;
-        break;
-      }
-    }
-
-    if (charExists) {
+    if (mismatchIndex != -1) {
+      mismatches[mismatchIndex] = ' ';
       responceColors[i] = #B59F3B;
-      if (keyColors[index] != #538D4E) {
-        keyColors[index] = #B59F3B;
+      if (keyColors[keyIndex] != #538D4E) {
+        keyColors[keyIndex] = #B59F3B;
       }
     }
+
+    //boolean charExists = false;
+    //for (int j = 0; j < mismatches.length; j++) {
+    //  if (c == mismatches[j]) {
+    //    charExists = true;
+    //    break;
+    //  }
+    //}
+
+    //if (charExists) {
+    //  responceColors[i] = #B59F3B;
+    //  if (keyColors[index] != #538D4E) {
+    //    keyColors[index] = #B59F3B;
+    //  }
+    //}
   }
 }
 
@@ -238,6 +247,7 @@ void keyPressed() {
           for (String s : words) {
             if (s.equals(word)) {
               wordExists = true;
+              println(0);
               break;
             }
           }
