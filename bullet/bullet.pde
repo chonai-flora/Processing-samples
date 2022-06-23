@@ -1,6 +1,7 @@
 // finalをつけて宣言すると定数になります
 // 定数は変数と違い値を書き換えることができません
 final float screen = 960.0; // ウィンドウサイズ
+final PVector o = new PVector(screen / 2.0, screen / 2.0);
 
 // Processingは同時キー入力に対応していないので変数で調整します
 boolean up, down, left, right; // キー入力用
@@ -99,10 +100,12 @@ class Bullet {
         float v = PI / (param * 90.0 + sin(t) * (cos(t) + 1.0)) * i; // 弾幕を回転させる角度
         float r = sin(i + i / screen + t + u) * 675.0; // 原点からの距離
 
-        // 回転座標の一次変換公式を用いて座標を回転させる
-        float p = r * cos(u), q = r * sin(u); // 回転させる前の座標
-        pos[i].x = p * cos(v) - q * sin(v) + screen / 2.0; // x' = xcosθ - ysinθ
-        pos[i].y = q * cos(v) + p * sin(v) + screen / 2.0; // y' = ycosθ + xsinθ
+        // PVectorクラスの.rotate()で座標を変換
+        // 回転座標の一次変換公式を用いて座標を回転させてもよい
+        pos[i].set(cos(u), sin(u))
+          .mult(r)
+          .rotate(v)
+          .add(o);
       }
     } else if (type == 1) { // タイプ2
       int index = 0;
@@ -113,10 +116,11 @@ class Bullet {
           float v = t + atan(sohcahtoa(t + u * 3.0)); // 弾幕を回転させる角度
           float r = u * 500.0; // 原点からの距離
 
-          // 回転座標の一次変換公式を用いて座標を回転させる
-          float p = r * cos(PI / 4.0 * i), q = r * sin(PI / 4.0 * i);
-          pos[index].x = p * cos(v) - q * sin(v) + screen / 2.0; // x' = xcosθ - ysinθ
-          pos[index].y = q * cos(v) + p * sin(v) + screen / 2.0; // y' = ycosθ + xsinθ
+          // PVectorクラスの.rotate()で座標を変換
+          pos[index].set(cos(PI / 4.0 * i), sin(PI / 4.0 * i))
+            .mult(r)
+            .rotate(v)
+            .add(o);
           index++;
         }
       }
@@ -127,14 +131,13 @@ class Bullet {
           float r = frameCount * 10 % 675;
           float t = 0.0;
           if (r < 10.0) {
-            t = atan2(pPos.y - screen / 2.0, pPos.x - screen / 2.0); // atan2()で自機までの角度を計算
+            t = atan2(pPos.y - o.y, pPos.x - o.y); // atan2()で自機までの角度を計算
             theta = t;
           } else {
             t = theta;
           }
           float u = t + 0.1 * i * (j == 0 ? -1.0 : 1.0);
-          pos[index].x = r * cos(u) + screen / 2.0;
-          pos[index].y = r * sin(u) + screen / 2.0;
+          pos[index].set(cos(u), sin(u)).mult(r).add(o);
           index++;
         }
       }
@@ -195,8 +198,7 @@ class Player {
   // 値の更新
   void update() {
     if (action == 0) {
-      pos.x = mouseX;
-      pos.y = mouseY;
+      pos.x = mouseX; pos.y = mouseY;
     } else {
       // 斜めに移動させると((設定した速度)*√2)分移動してしまうため
       // 用意したoffsetで速度を調整します
